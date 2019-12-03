@@ -1,16 +1,16 @@
-FROM debian:jessie-slim
-LABEL maintainer="aaron@roydhouse.com"
+FROM ubuntu:18.04
+LABEL MAINTAINER="lumir.jasiok@tieto.com"
 
-ENV KUBE_LATEST_VERSION="v1.5.2"
 RUN export DEBIAN_FRONTEND=noninteractive \
   && apt-get update -y \
-  && apt-get install -y apt-utils gettext-base python curl unzip \
+  && apt-get install -y apt-utils gettext-base python curl unzip python-pip \
   && curl -sS -L https://s3.amazonaws.com/aws-cli/awscli-bundle.zip -o awscli-bundle.zip \
   && unzip awscli-bundle.zip \
   && ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws \
   && rm -rf ./awscli-bundle \
-  && curl -sS -L https://storage.googleapis.com/kubernetes-release/release/${KUBE_LATEST_VERSION}/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl \
+  && curl -o /usr/local/bin/kubectl -L https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl \
   && chmod +x /usr/local/bin/kubectl \
+  && pip install python-swiftclient python-keystoneclient \
   && apt-get autoremove -y \
   && apt-get clean -y
 

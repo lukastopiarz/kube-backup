@@ -38,6 +38,10 @@ Usage:
     [--use-kubeconfig-from-secret|--kubeconfig-secret=<secret name>]
     [--slack-secret=<secret name>] [--slack-pretext=<text>]
     [--timestamp=<timestamp>] [--backup-name=<backup name>]
+    [--os-auth-url=<openstack keystone url>] [--os-project-name=<openstack project name>] 
+    [--os-username=<openstack username>] [--os-password=<openstack user password>]
+    [--os-region-name=<openstack region>] [--os-identity-api-version=<openstack keystone api version>]
+    [--backup-backend=<swift or s3>]
     [--dry-run]
   ${script_name} --help
   ${script_name} --version
@@ -50,6 +54,7 @@ Notes:
   --backup-name will replace e.g. the database name or file path
   --dry-run will do everything except the actual backup
   --slack-pretext may include links using the Slack '<url|text>' syntax
+  --backup-backend choose either OpenStack Swift or Amazon S3 object storage
 
 END
 }
@@ -242,7 +247,7 @@ get_s3_secret ()
     echo "Fetched S3 bucket name from '$secret_name' secret"
     return 0
   else
-    echo "Failed to load S3 bucket from '$secret_name' secret"
+    echo "Failed to load S3 bucket from '$secret_name' secret"swift
     return 2
   fi
 }
@@ -254,6 +259,28 @@ check_for_s3_secret ()
   if [[ -z "${S3_BUCKET}" ]]; then
     get_s3_secret $secret_name || return 1
   fi
+}
+
+#======================================================================
+# OpenStack support
+#
+set_openstack_environment_variables ()
+{
+	echo "Setting up OpenStack environment variables"
+	local os_auth_url_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_AUTH_URL}')
+	export OS_AUTH_URL=$(echo "$os_auth_url_secret" | $BASE64 -d)
+	local os_project_name_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_PROJECT_NAME}')
+	export OS_PROJECT_NAME=$(echo "$os_project_name_secret" | $BASE64 -d)
+	local os_username_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_USERNAME}')
+	export OS_USERNAME=$(echo "$os_username_secret" | $BASE64 -d)
+	local os_pasword_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_PASSWORD}')
+	export OS_PASSWORD=$(echo "$os_pasword_secret" | $BASE64 -d)
+	local os_region_name_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_REGION_NAME}')
+	export OS_REGION_NAME=$(echo "$os_region_name_secret" | $BASE64 -d)
+	local os_identity_api_version_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_IDENTITY_API_VERSION}')
+	export OS_IDENTITY_API_VERSION=$(echo "$os_identity_api_version_secret" | $BASE64 -d)
+	local os_api_version_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_API_VERSION}')
+	export OS_API_VERSION=$(echo "$os_api_version_secret" | $BASE64 -d)
 }
 
 #======================================================================
@@ -444,6 +471,7 @@ backup_mysql_exec ()
 #
 backup_files_exec ()
 {
+  echo "Running backup_files_exec"
   check_container 'POD' 'CONTAINER'
   if [[ "$?" -ne 0 ]]; then
     echo "Aborting backup, no container selected"
@@ -499,6 +527,57 @@ backup_files_exec ()
     echo "Skipping backup, dry run delected"
   fi
 }
+
+
+#===========================================================================
+# Backup or restore files using 'kubectl exec' proxy of tar output to Swift
+# - backup_files_exec_swift
+#
+
+# This strategy relies on kubectl exec into the container
+# Requires tools in container: tar gzip
+#
+backup_files_exec_swift ()
+{
+  echo "Running backup_files_exec_swift"
+  check_container 'POD' 'CONTAINER'
+  if [[ "$?" -ne 0 ]]; then
+    echo "Aborting backup, no container selected"
+    exit 1
+  fi
+
+  if [[ -z "${FILES_PATH}" ]]; then
+    echo "No backup path specified"
+    exit 3
+  fi
+
+  #
+  # Work out the target path
+  #
+
+  local backup_path="${NAMESPACE-default}/${TIMESTAMP}"
+  local backup_filename=$(create_filename "${POD}" "${CONTAINER}" "${BACKUP_NAME:-$FILES_PATH}" "${TIMESTAMP}" ".tar.gz")
+  local target="backup_container"
+
+  #
+  # Create and execute 'kubectl exec' backup command
+  #
+
+  local cmd="${KUBECTL} exec -i ${POD} --container=${CONTAINER} ${NS_ARG} --"
+  local backup_cmd="tar czf - '${FILES_PATH}'"
+  echo "Backing up files in '${FILES_PATH}' from container '${CONTAINER}' in pod '${POD}' to '${target}'"
+  if [[ "${DRY_RUN}" != "true" ]]; then
+    $cmd bash -c "${backup_cmd}" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=3 --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} upload --object-name="${backup_filename}" "${target}" -
+    if [[ "$?" -eq 0 ]];then
+      send_slack_message_and_echo "Backed up files in '${FILES_PATH}' from container '${CONTAINER}' in pod '${POD}' to '${target}'"
+    else
+      send_slack_message_and_echo "Error: Failed to back up files in '${FILES_PATH}' from container '${CONTAINER}' in pod '${POD}' to '${target}'" danger
+    fi
+  else
+    echo "Skipping backup, dry run delected"
+  fi
+}
+
 
 #======================================================================
 # Parse options
@@ -576,6 +655,34 @@ case $i in
   BACKUP_NAME="${i#*=}"
   shift # past argument=value
   ;;
+  --os-auth-url=*)
+  OS_AUTH_URL="${i#*=}"
+  shift
+  ;;
+  --os-project-name=*)
+  OS_PROJECT_NAME="${i#*=}"
+  shift
+  ;;
+  --os-username=*)
+  OS_USERNAME="${i#*=}"
+  shift
+  ;;
+  --os-password=*)
+  OS_PASSWORD="${i#*=}"
+  shift
+  ;;
+  --os-region-name=*)
+  OS_REGION_NAME="${i#*=}"
+  shift
+  ;;
+  --os-identity-api-version=*)
+  OS_IDENTITY_API_VERSION="${i#*=}"
+  shift
+  ;;
+  --backup-backend=*)
+  BACKUP_BACKEND="${i#*=}"
+  shift
+  ;;
   --dry-run)
   DRY_RUN=true
   shift # past argument with no value
@@ -611,7 +718,8 @@ fi
 : ${AWSCLI:=aws}
 : ${ENVSUBST:=envsubst}
 : ${BASE64:=base64}
-check_tools $KUBECTL $AWSCLI $ENVSUBST $BASE64 sed basename
+: ${SWIFTCLI:=swift}
+check_tools $KUBECTL $AWSCLI $ENVSUBST $BASE64 $SWIFTCLI sed basename
 
 # Default secret name is 'kube-backup' in the same namespace
 # This is the default secret for all other secrets
@@ -685,10 +793,23 @@ fi
 
 case $TASK in
   backup-mysql-exec)
-    backup_mysql_exec
+	if [[ "${BACKUP_BACKEND}" == "s3" ]]; then
+	  backup_mysql_exec
+	elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
+	  backup_mysql_exec_swift
+	else
+	  echo "Unknown backup backend"
+	fi
   ;;
   backup-files-exec)
-    backup_files_exec
+	if [[ "${BACKUP_BACKEND}" == "s3" ]]; then
+      backup_files_exec
+	elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
+      set_openstack_environment_variables
+      backup_files_exec_swift
+	else
+	  echo "Unknown backup backend"
+	fi
   ;;
   test-slack)
     send_slack_message_and_echo "Hello world" warning
