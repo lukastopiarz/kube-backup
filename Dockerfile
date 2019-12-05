@@ -12,11 +12,15 @@ RUN export DEBIAN_FRONTEND=noninteractive \
   && chmod +x /usr/local/bin/kubectl \
   && pip install python-swiftclient python-keystoneclient \
   && apt-get autoremove -y \
-  && apt-get clean -y
+  && apt-get clean -y \
+  && groupadd -r kube-backup && useradd --no-log-init -r -g kube-backup kube-backup -d /home/kube-backup -m
 
 # We will start and expose ssh on port 22
 EXPOSE 22
 
 # Add the container start script, which will start ssh
-COPY bin/ /root/bin
-ENTRYPOINT ["/root/bin/kube-backup.sh"]
+COPY bin/ /home/kube-backup/bin
+
+# change the user
+USER kube-backup
+ENTRYPOINT ["/home/kube-backup/bin/kube-backup.sh"]
