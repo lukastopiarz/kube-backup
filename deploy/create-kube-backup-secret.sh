@@ -62,7 +62,7 @@ do
     kubectl $ACTION --namespace $n -f - <<END
 apiVersion: v1
 kind: Secret
-type: kubernetes.io/opaque
+type: Opaque
 metadata:
   name: $SECRET_NAME
   labels:
@@ -79,7 +79,7 @@ END
     kubectl $ACTION --namespace $n -f - <<END
 apiVersion: v1
 kind: Secret
-type: kubernetes.io/opaque
+type: Opaque
 metadata:
   name: $SECRET_NAME
   labels:
