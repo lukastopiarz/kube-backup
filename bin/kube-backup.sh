@@ -567,7 +567,7 @@ backup_files_exec_swift ()
   local backup_cmd="tar czf - '${FILES_PATH}'"
   echo "Backing up files in '${FILES_PATH}' from container '${CONTAINER}' in pod '${POD}' to '${target}'"
   if [[ "${DRY_RUN}" != "true" ]]; then
-    $cmd bash -c "${backup_cmd}" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=3 --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} upload --object-name="${backup_filename}" "${target}" -
+    $cmd bash -c "${backup_cmd}" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=${OS_API_VERSION} --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} upload --object-name="${backup_filename}" "${target}" -
     if [[ "$?" -eq 0 ]];then
       send_slack_message_and_echo "Backed up files in '${FILES_PATH}' from container '${CONTAINER}' in pod '${POD}' to '${target}'"
     else
