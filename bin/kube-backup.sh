@@ -574,7 +574,9 @@ backup_files_exec_swift ()
       send_slack_message_and_echo "Error: Failed to back up files in '${FILES_PATH}' from container '${CONTAINER}' in pod '${POD}' to '${target}'" danger
     fi
   else
-    echo "Skipping backup, dry run delected"
+    echo "Would exec:"
+    echo "${cmd} bash -c \"${backup_cmd}\" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=3 --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=HIDDEN_PASSWORD upload --object-name=\"${backup_filename}\" \"${target}\" -"
+    echo "...but skipping backup, dry run selected"
   fi
 }
 
