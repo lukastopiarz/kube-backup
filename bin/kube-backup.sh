@@ -673,14 +673,14 @@ case $i in
   OS_PASSWORD="${i#*=}"
   shift
   ;;
-  --os-region-name=*)
-  OS_REGION_NAME="${i#*=}"
-  shift
-  ;;
-  --os-identity-api-version=*)
-  OS_IDENTITY_API_VERSION="${i#*=}"
-  shift
-  ;;
+#  --os-region-name=*)
+#  OS_REGION_NAME="${i#*=}"
+#  shift
+#  ;;
+#  --os-identity-api-version=*)
+#  OS_IDENTITY_API_VERSION="${i#*=}"
+#  shift
+#  ;;
   --backup-backend=*)
   BACKUP_BACKEND="${i#*=}"
   shift
