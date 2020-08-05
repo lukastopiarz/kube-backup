@@ -266,21 +266,39 @@ check_for_s3_secret ()
 #
 set_openstack_environment_variables ()
 {
-	echo "Setting up OpenStack environment variables"
-	local os_auth_url_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_AUTH_URL}')
-	export OS_AUTH_URL=$(echo "$os_auth_url_secret" | $BASE64 -d)
-	local os_project_name_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_PROJECT_NAME}')
-	export OS_PROJECT_NAME=$(echo "$os_project_name_secret" | $BASE64 -d)
-	local os_username_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_USERNAME}')
-	export OS_USERNAME=$(echo "$os_username_secret" | $BASE64 -d)
-	local os_pasword_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_PASSWORD}')
-	export OS_PASSWORD=$(echo "$os_pasword_secret" | $BASE64 -d)
-	local os_region_name_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_REGION_NAME}')
-	export OS_REGION_NAME=$(echo "$os_region_name_secret" | $BASE64 -d)
-	local os_identity_api_version_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_IDENTITY_API_VERSION}')
-	export OS_IDENTITY_API_VERSION=$(echo "$os_identity_api_version_secret" | $BASE64 -d)
-	local os_api_version_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.items[*].data.OS_API_VERSION}')
-	export OS_API_VERSION=$(echo "$os_api_version_secret" | $BASE64 -d)
+  local secret_name=$1
+
+  echo "Setting up OpenStack environment variables (If not provided as parameters)"
+  [[ -n $OS_AUTH_URL ]] || {
+    local os_auth_url_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_AUTH_URL}');
+    echo $os_auth_url_secret
+    export OS_AUTH_URL=$(echo "$os_auth_url_secret" | $BASE64 -d);
+    echo $OS_AUTH_URL
+  }
+  [[ -n $OS_PROJECT_NAME ]] || {
+    local os_project_name_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_PROJECT_NAME}');
+    export OS_PROJECT_NAME=$(echo "$os_project_name_secret" | $BASE64 -d);
+  }
+  [[ -n $OS_USERNAME ]] || {
+    local os_username_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_USERNAME}');
+    export OS_USERNAME=$(echo "$os_username_secret" | $BASE64 -d);
+  }
+	[[ -n $OS_PASSWORD ]] || {
+    local os_pasword_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_PASSWORD}');
+    export OS_PASSWORD=$(echo "$os_pasword_secret" | $BASE64 -d);
+  }
+#  [[ -n $OS_REGION_NAME ]] || {
+#  	local os_region_name_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_REGION_NAME}');
+#  	export OS_REGION_NAME=$(echo "$os_region_name_secret" | $BASE64 -d);
+#  }
+#	[[ -n $OS_IDENTITY_API_VERSION ]] || {
+#    local os_identity_api_version_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_IDENTITY_API_VERSION}');
+#  	export OS_IDENTITY_API_VERSION=$(echo "$os_identity_api_version_secret" | $BASE64 -d);
+#  }
+	[[ -n $OS_API_VERSION ]] || {
+    local os_api_version_secret=$($KUBECTL get secret ${secret_name} -n ${NAMESPACE} -o jsonpath='{.data.OS_API_VERSION}');
+    export OS_API_VERSION=$(echo "$os_api_version_secret" | $BASE64 -d);
+  }
 }
 
 #======================================================================
@@ -807,7 +825,7 @@ case $TASK in
 	if [[ "${BACKUP_BACKEND}" == "s3" ]]; then
       backup_files_exec
 	elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
-      set_openstack_environment_variables
+      set_openstack_environment_variables ${SECRET}
       backup_files_exec_swift
 	else
 	  echo "Unknown backup backend"
