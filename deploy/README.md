@@ -6,11 +6,23 @@ It will create a `kube-backup` namespace with RBAC roles and `kube-backup` Secre
 ## OpenStack Swift Install Steps
 
 ### Cluster Administrator Tasks
-Cluster admnistrator has to create namespace/project kube-backup using following commands:
+
+Cluster admnistrator has to create namespace/project for kube-backup:
 
 ```
-kubectl apply -f kube-backup-namespace.yaml
-kubectl apply -f kube-backup-rbac.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-backup
+  labels:
+    app: kube-backup
+    env: system
+```
+
+Use following command to create one:
+
+```
+oc apply -f kube-backup-namespace.yaml
 ```
 
 In case of OpenShift, cluster administrator has to allow communication to the pods and fetching the secrets with `kube-backup-rbac.yaml` like this:
@@ -47,15 +59,15 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-Once you modify `custom-kube-backup-rbac.yaml`, cluster admin has to apply it:
+Once you modify `kube-backup-rbac.yaml`, cluster admin has to apply it:
 
 ```
-oc apply -f custom-kube-backup-rbac.yaml
+oc apply -f kube-backup-rbac.yaml
 ```
 
 ### Developer/Namespace Admin Tasks
 
-Set the required environment variables:
+Environment variables (Required if not set as parameters during pod run) can be populated to kube-backup secret:
 
 - BACKUP\_BACKEND (swift)
 - SLACK\_WEBHOOK
@@ -63,12 +75,13 @@ Set the required environment variables:
 - OS\_PROJECT\_NAME
 - OS\_USERNAME
 - OS\_PASSWORD
-- OS\_REGION\_NAME
-- OS\_IDENTITY\_API\_VERSION
 - OS\_API\_VERSION
-- KUBECONFIG\_FILE (eg. ~/.kube/config)
-- NAMESPACES (namespaces/projects you want to backup)
+- NAMESPACES (namespaces/projects of pods/containers you want to backup)
 
+[//]: # (These variables not used now:)
+[//]: # (- OS\_REGION\_NAME)
+[//]: # (- OS\_IDENTITY\_API\_VERSION)
+[//]: # (- KUBECONFIG\_FILE \(eg. ~/.kube/config\))
 
 Switch to the environment/project you want to backup:
 

@@ -29,19 +29,19 @@ elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
   : ${OS_PROJECT_NAME?"Must define OS_PROJECT_NAME variable"}
   : ${OS_USERNAME?"Must define OS_USERNAME variable"}
   : ${OS_PASSWORD?"Must define OS_PASSWORD variable"}
-  : ${OS_REGION_NAME?"Must define OS_REGION_NAME variable"}
-  : ${OS_IDENTITY_API_VERSION?"Must define OS_IDENTITY_API_VERSION variable"}
+#  : ${OS_REGION_NAME?"Must define OS_REGION_NAME variable"}
+#  : ${OS_IDENTITY_API_VERSION?"Must define OS_IDENTITY_API_VERSION variable"}
   : ${OS_API_VERSION?"Must define OS_API_VERSION variable"}
 else
   echo "Unknown backup backend!"
   exit 1
 fi
 
-: ${KUBECONFIG_FILE:=kubeconfig}
-if [[ ! -r "${KUBECONFIG_FILE}" ]]; then
-  echo "kubeconfig file '${KUBECONFIG_FILE}' is missing"
-  exit 1
-fi
+#: ${KUBECONFIG_FILE:=kubeconfig}
+#if [[ ! -r "${KUBECONFIG_FILE}" ]]; then
+#  echo "kubeconfig file '${KUBECONFIG_FILE}' is missing"
+#  exit 1
+#fi
 
 
 : ${SECRET_NAME:=kube-backup}
@@ -91,10 +91,11 @@ data:
   OS_PROJECT_NAME: $(echo -n "${OS_PROJECT_NAME}" | ${BASE64_COMMAND})
   OS_USERNAME: $(echo -n "${OS_USERNAME}" | ${BASE64_COMMAND})
   OS_PASSWORD: $(echo -n "${OS_PASSWORD}" | ${BASE64_COMMAND})
-  OS_REGION_NAME: $(echo -n "${OS_REGION_NAME}" | ${BASE64_COMMAND})
-  OS_IDENTITY_API_VERSION: $(echo -n "${OS_IDENTITY_API_VERSION}" | ${BASE64_COMMAND})
   OS_API_VERSION: $(echo -n "${OS_API_VERSION}" | ${BASE64_COMMAND})
-  kubeconfig: $(cat "${KUBECONFIG_FILE}" | ${BASE64_COMMAND})
 END
+# Not used:
+#  kubeconfig: $(cat "${KUBECONFIG_FILE}" | ${BASE64_COMMAND})
+#  OS_REGION_NAME: $(echo -n "${OS_REGION_NAME}" | ${BASE64_COMMAND})
+#  OS_IDENTITY_API_VERSION: $(echo -n "${OS_IDENTITY_API_VERSION}" | ${BASE64_COMMAND})
   fi
 done
