@@ -71,7 +71,7 @@ check_tools ()
   for prog in "$@" envsubst; do
     if [ -z "$(which $prog)" ]; then
       echo "Missing dependency '${prog}'"
-      echo 3
+      exit 3
     fi
   done
 }
