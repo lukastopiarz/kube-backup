@@ -38,9 +38,9 @@ Usage:
     [--use-kubeconfig-from-secret|--kubeconfig-secret=<secret name>]
     [--slack-secret=<secret name>] [--slack-pretext=<text>]
     [--timestamp=<timestamp>] [--backup-name=<backup name>]
-    [--os-auth-url=<openstack keystone url>] [--os-project-name=<openstack project name>] 
+    [--os-auth-url=<openstack keystone url>] [--os-api-version=<openstack api version>]
+    [--os-project-name=<openstack project name>]
     [--os-username=<openstack username>] [--os-password=<openstack user password>]
-    [--os-region-name=<openstack region>] [--os-identity-api-version=<openstack keystone api version>]
     [--backup-backend=<swift or s3>]
     [--dry-run]
   ${script_name} --help
@@ -677,6 +677,10 @@ case $i in
   ;;
   --os-auth-url=*)
   OS_AUTH_URL="${i#*=}"
+  shift
+  ;;
+  --os-api-version=*)
+  OS_API_VERSION="${i#*=}"
   shift
   ;;
   --os-project-name=*)
