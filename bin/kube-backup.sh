@@ -31,8 +31,10 @@ display_usage ()
   cat <<END
 Usage:
   ${script_name} --task=<task name> [options...]
+  ${script_name} --task=backup-etcd [options...]
   ${script_name} --task=backup-mysql-exec [--database=<db name>] [options...]
   ${script_name} --task=backup-files-exec [--files-path=<files path>] [options...]
+  Options:
     [--pod=<pod-name>|--selector=<selector>] [--container=<container-name>] [--secret=<secret name>]
     [--s3-bucket=<bucket name>] [--s3-prefix=<prefix>] [--aws-secret=<secret name>]
     [--use-kubeconfig-from-secret|--kubeconfig-secret=<secret name>]
@@ -598,6 +600,68 @@ backup_files_exec_swift ()
   fi
 }
 
+#===========================================================================================
+# Backup etcd db snapshot using 'kubectl exec' proxy of etcd tarred snapshot output to Swift
+# - backup_etcd_swift
+#
+
+# This strategy relies on kubectl exec into the container
+# Requires tools in container: etcdctl tar gzip
+#
+backup_etcd_swift ()
+{
+  echo "Running backup_etcd_swift"
+  check_container 'POD' 'CONTAINER'
+  if [[ "$?" -ne 0 ]]; then
+    echo "Aborting backup, no container selected"
+    exit 1
+  fi
+
+  #
+  # Work out the target path
+  #
+
+  local snapshot_dir="/var/lib/etcd/.backup"
+  local backup_path="${NAMESPACE-default}/${TIMESTAMP}"
+  local backup_filename=$(create_filename "${POD}" "${CONTAINER}" "${BACKUP_NAME:-etcddb}" "${TIMESTAMP}" ".tar.gz")
+  local target="backup_container"
+
+  #
+  # Create ETCD POD URL
+  #
+
+  local ETCD_POD_IP=$($KUBECTL get pod ${POD} $NS_ARG -o jsonpath={.status.podIP})
+  local ETCD_PORT=2379
+  local ETCD_ENDPOINT_URL="https://${ETCD_POD_IP}:${ETCD_PORT}"
+
+  #
+  # Create and execute 'kubectl exec' backup command
+  #
+
+  local cmd="${KUBECTL} exec -i ${POD} --container=${CONTAINER} ${NS_ARG} --"
+  local check_health="export ETCDCTL_API=3; etcdctl --cert=/etc/etcd/peer.crt --key=/etc/etcd/peer.key --cacert=/etc/etcd/ca.crt --endpoints=\"${ETCD_ENDPOINT_URL}\" endpoint health"
+  local snapshot_cmd="export ETCDCTL_API=3; etcdctl --cert=/etc/etcd/peer.crt --key=/etc/etcd/peer.key --cacert=/etc/etcd/ca.crt --endpoints=\"${ETCD_ENDPOINT_URL}\" --write-out=table snapshot save ${snapshot_dir}/snapshotdb"
+  echo "Backing up etcd from container '${CONTAINER}' in pod '${POD}' to '${target}'"
+  if [[ $($cmd bash -c "${check_health}") ]]; then
+    if [[ "${DRY_RUN}" != "true" ]]; then
+      $cmd bash -c "test -d ${snapshot_dir} || mkdir ${snapshot_dir}"
+      $cmd bash -c "${snapshot_cmd} && tar czf - ${snapshot_dir}/snapshotdb" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=${OS_API_VERSION} --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} upload --object-name="${backup_filename}" "${target}" -
+      if [[ "$?" -eq 0 ]]; then
+        send_slack_message_and_echo "Backed up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'"
+        $cmd bash -c "rm -f ${snapshot_dir}/snapshotdb"
+      else
+        send_slack_message_and_echo "Error: Failed to back up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'" danger
+      fi
+    else
+      echo "Would exec:"
+      echo "$cmd bash -c \"test -d ${snapshot_dir} || mkdir ${snapshot_dir}\""
+      echo "$cmd bash -c \"${snapshot_cmd} && tar czf - ${snapshot_dir}/snapshot.db\" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=${OS_API_VERSION} --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=HIDDEN_PASSWORD upload --object-name=\"${backup_filename}\" \"${target}\" -"
+      echo "...but skipping backup, dry run selected"
+    fi
+  else
+    exit 2
+  fi
+}
 
 #======================================================================
 # Parse options
@@ -831,6 +895,17 @@ case $TASK in
 	elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
       set_openstack_environment_variables ${SECRET}
       backup_files_exec_swift
+	else
+	  echo "Unknown backup backend"
+	fi
+  ;;
+  backup-etcd)
+	if [[ "${BACKUP_BACKEND}" == "s3" ]]; then
+      #backup_etcd_s3
+      echo "Not implemented yet"
+	elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
+      set_openstack_environment_variables ${SECRET}
+      backup_etcd_swift
 	else
 	  echo "Unknown backup backend"
 	fi

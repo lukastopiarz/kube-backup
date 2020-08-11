@@ -1,8 +1,8 @@
 # kube-backup
 
 Utility container to backup databases and files from containers in a Kubernetes cluster. Currently
-it can use `kubectl exec` to backup database and files from within containers and store the 
-backup files in an AWS S3 bucket.
+it can use `kubectl exec` to backup database, files and ETCD db state from within containers and store the 
+backup files in an AWS S3 bucket or SWIFT object store.
 
 Docker images are available on [Docker Hub](https://hub.docker.com/repository/docker/jas02/kube-backup).
 
@@ -31,6 +31,13 @@ kubectl run --attach --rm --restart=Never kube-backup --image jas02/kube-backup 
  --task=backup-mysql-exec --namespace=default --pod=my-pod --container=mysql --backup-backend=swift
 ```
 
+Back up ETCD db (Make snapshot) using etcdctl in etcd container. It assumes `bash`, `tar`, `gzip` and `etcdctl` (API v3) are available.
+
+```
+kubectl run --attach --rm --restart=Never kube-backup --image jas02/kube-backup -- \
+ --task=backup-etcd --namespace=kube-system --pod=etcd-pod --container=etcd --backup-backend=swift
+```
+
 You could also schedule a backup to run daily.
 
 ```
@@ -46,8 +53,10 @@ environment variables.
 ```
 Usage:
   kube-backup.sh --task=<task name> [options...]
+  kube-backup.sh --task=backup-etcd [options...]
   kube-backup.sh --task=backup-mysql-exec [--database=<db name>] [options...]
   kube-backup.sh --task=backup-files-exec [--files-path=<files path>] [options...]
+  Options:
     [--pod=<pod-name>|--selector=<selector>] [--container=<container-name>] [--secret=<secret name>]
     [--s3-bucket=<bucket name>] [--s3-prefix=<prefix>] [--aws-secret=<secret name>]
     [--use-kubeconfig-from-secret|--kubeconfig-secret=<secret name>]
