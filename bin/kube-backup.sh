@@ -31,7 +31,7 @@ display_usage ()
   cat <<END
 Usage:
   ${script_name} --task=<task name> [options...]
-  ${script_name} --task=backup-etcd [options...]
+  ${script_name} --task=backup-etcd [--retention=<number of backups to keep> options...]
   ${script_name} --task=backup-mysql-exec [--database=<db name>] [options...]
   ${script_name} --task=backup-files-exec [--files-path=<files path>] [options...]
   Options:
@@ -623,7 +623,8 @@ backup_etcd_swift ()
 
   local snapshot_dir="/var/lib/etcd/.backup"
   local backup_path="${NAMESPACE-default}/${TIMESTAMP}"
-  local backup_filename=$(create_filename "${POD}" "${CONTAINER}" "${BACKUP_NAME:-etcddb}" "${TIMESTAMP}" ".tar.gz")
+  local base_backup_filename=$(create_filename "${POD}" "${CONTAINER}" "${BACKUP_NAME:-etcddb}")
+  local backup_filename=$(create_filename "${base_backup_filename}" "${TIMESTAMP}" ".tar.gz")
   local target="backup_container"
 
   #
@@ -652,16 +653,40 @@ backup_etcd_swift ()
       else
         send_slack_message_and_echo "Error: Failed to back up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'" danger
       fi
+      if [[ -n "{$RETENTION}" ]]; then
+        [ "${RETENTION}" -eq "${RETENTION}" ]  2> /dev/null || { echo "retention not a number!"; exit 2; }
+        if [ ${RETENTION} -gt 0 ]; then
+          backup_list=$(${SWIFTCLI} \
+            --os-auth-url=${OS_AUTH_URL} \
+            --auth-version=${OS_API_VERSION} \
+            --os-project-name=${OS_PROJECT_NAME} \
+            --os-username=${OS_USERNAME} \
+            --os-password=${OS_PASSWORD} \
+            list ${target} | grep ${base_backup_filename} | sort)
+          linecount=$(echo "${backup_list}" | wc -l)
+          if [ ${linecount} -gt ${RETENTION} ]; then
+            echo "Keeping last ${RETENTION} entries. Removing old backups:"
+            lastline=$(( ${linecount} - ${RETENTION} ))
+            delete_list=$(echo "${backup_list}" | sed -n "1,${lastline} p")
+            for old_entry in ${delete_list}; do
+              ${SWIFTCLI} \
+                --os-auth-url=${OS_AUTH_URL} \
+                --auth-version=${OS_API_VERSION} \
+                --os-project-name=${OS_PROJECT_NAME} \
+                --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} \
+                delete ${target} ${old_entry}
+            done
+          fi
+        fi
+      fi
     else
-      echo "Would exec:"
-      echo "$cmd bash -c \"test -d ${snapshot_dir} || mkdir ${snapshot_dir}\""
-      echo "$cmd bash -c \"${snapshot_cmd} && tar czf - ${snapshot_dir}/snapshot.db\" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=${OS_API_VERSION} --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=HIDDEN_PASSWORD upload --object-name=\"${backup_filename}\" \"${target}\" -"
-      echo "...but skipping backup, dry run selected"
+      echo "Skipping backup, dry run delected"
     fi
   else
     exit 2
   fi
 }
+
 
 #======================================================================
 # Parse options
@@ -769,6 +794,10 @@ case $i in
 #  ;;
   --backup-backend=*)
   BACKUP_BACKEND="${i#*=}"
+  shift
+  ;;
+  --retention=*)
+  RETENTION="${i#*=}"
   shift
   ;;
   --dry-run)
