@@ -4,22 +4,22 @@ Utility container to backup databases and files from containers in a Kubernetes 
 it can use `kubectl exec` to backup database, files and ETCD db state from within containers and store the 
 backup files in an AWS S3 bucket or SWIFT object store.
 
-Docker images are available on [Docker Hub](https://hub.docker.com/repository/docker/jas02/kube-backup).
+Docker images are available on [Docker Hub](https://hub.docker.com/repository/docker/lukastopiarz/kube-backup).
 
-Source code is available on [Github](https://github.com/jas02/kube-backup). Please
+Source code is available on [Github](https://github.com/lukastopiarz/kube-backup). Please
 make comments and contribute improvements on Github.
 
 ## Example use cases
 
 These examples assume you have created a `kube-backup` Secret with AWS credentials and an
 S3 bucket name in the namespace where you are running 'kube-backup'. Other alternative is to use OpenStack as backup solution. See the 
-[deploy directory](https://github.com/jas02/kube-backup/tree/master/deploy)
+[deploy directory](https://github.com/lukastopiarz/kube-backup/tree/master/deploy)
 for an example deployment.
 
 Back up a files using `tar` in a container. It assumes `bash`, `tar`, and `gzip` is available.
 
 ```
-kubectl run --attach --rm --restart=Never kube-backup --image jas02/kube-backup -- \
+kubectl run --attach --rm --restart=Never kube-backup --image lukastopiarz/kube-backup -- \
  --task=backup-files-exec --namespace=default --pod=my-pod --container=website --files-path=/var/www --backup-backend=swift
 ```
 
@@ -27,21 +27,21 @@ Back up a database using `mysqldump` run in the MySQL container. It assumes the 
 based on the [offical MySQL container images](https://hub.docker.com/_/mysql/) and that `gzip` is available.
 
 ```
-kubectl run --attach --rm --restart=Never kube-backup --image jas02/kube-backup -- \
+kubectl run --attach --rm --restart=Never kube-backup --image lukastopiarz/kube-backup -- \
  --task=backup-mysql-exec --namespace=default --pod=my-pod --container=mysql --backup-backend=swift
 ```
 
 Back up ETCD db (Make snapshot) using etcdctl in etcd container. It assumes `bash`, `tar`, `gzip` and `etcdctl` (API v3) are available.
 
 ```
-kubectl run --attach --rm --restart=Never kube-backup --image jas02/kube-backup -- \
+kubectl run --attach --rm --restart=Never kube-backup --image lukastopiarz/kube-backup -- \
  --task=backup-etcd --namespace=kube-system --pod=etcd-pod --container=etcd --backup-backend=swift
 ```
 
 You could also schedule a backup to run daily.
 
 ```
-kubectl run --schedule='@daily' --restart=Never kube-backup --image jas02/kube-backup -- \
+kubectl run --schedule='@daily' --restart=Never kube-backup --image lukastopiarz/kube-backup -- \
  --task=backup-files-exec --namespace=default --pod=my-pod --container=website --files-path=/var/www --backup-backend=swift
 ```
 
@@ -102,7 +102,7 @@ run_name () {
 }
 #EXTRA_OPTS='--dry-run'
 
-CMD='kubectl run --attach --restart=Never --rm --image=jas02/kube-backup --namespace=kube-backup'
+CMD='kubectl run --attach --restart=Never --rm --image=lukastopiarz/kube-backup --namespace=kube-backup'
 
 $CMD $(run_name) -- $EXTRA_OPTS \
   --task=backup-mysql-exec \
@@ -139,7 +139,7 @@ function Run-Name () {
 #$ExtraOpts = '--dry-run'
 
 # The '--attach --rm' allows us to block until completion, you could remove that not wait for completion
-$Command = 'kubectl run --attach --rm --quiet --restart=Never --image=jas02/kube-backup --namespace=kube-backup'
+$Command = 'kubectl run --attach --rm --quiet --restart=Never --image=lukastopiarz/kube-backup --namespace=kube-backup'
 
 Invoke-Expression "$Command $(Run-Name) -- $ExtraOpts --task=backup-mysql-exec --timestamp=$Timestamp --namespace=default '--selector=app=myapp,env=dev,component=mysql'"
 if ($LASTEXITCODE -ne 0) { Exit $LASTEXITCODE }
@@ -171,7 +171,7 @@ spec:
     - --selector=app=my-app,env=dev,component=website
     - --files-path=/var/www/assets
     - --backup-name=assets
-    image: jas02/kube-backup
+    image: lukastopiarz/kube-backup
     name: kb-task
   restartPolicy: Never
 ```
