@@ -31,7 +31,7 @@ display_usage ()
   cat <<END
 Usage:
   ${script_name} --task=<task name> [options...]
-  ${script_name} --task=backup-etcd [--retention=<number of backups to keep> options...]
+  ${script_name} --task=backup-etcd [--retention=<number of backups to keep>] [options...]
   ${script_name} --task=backup-mysql-exec [--database=<db name>] [options...]
   ${script_name} --task=backup-files-exec [--files-path=<files path>] [options...]
   Options:

@@ -53,7 +53,7 @@ environment variables.
 ```
 Usage:
   kube-backup.sh --task=<task name> [options...]
-  kube-backup.sh --task=backup-etcd [options...]
+  kube-backup.sh --task=backup-etcd [--retention=<number of backups to keep>] [options...]
   kube-backup.sh --task=backup-mysql-exec [--database=<db name>] [options...]
   kube-backup.sh --task=backup-files-exec [--files-path=<files path>] [options...]
   Options:
