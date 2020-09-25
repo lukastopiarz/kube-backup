@@ -1,5 +1,5 @@
 FROM ubuntu:18.04
-LABEL MAINTAINER="lumir.jasiok@tieto.com"
+LABEL MAINTAINER="lukas.topiarz@tieto.com"
 
 RUN export DEBIAN_FRONTEND=noninteractive \
   && apt-get update -y \
