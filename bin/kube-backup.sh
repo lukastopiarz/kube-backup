@@ -602,15 +602,15 @@ backup_files_exec_swift ()
 
 #===========================================================================================
 # Backup etcd db snapshot using 'kubectl exec' proxy of etcd tarred snapshot output to Swift
-# - backup_etcd_swift
+# - backup_etcd_exec_swift
 #
 
 # This strategy relies on kubectl exec into the container
 # Requires tools in container: etcdctl tar gzip
 #
-backup_etcd_swift ()
+backup_etcd_exec_swift ()
 {
-  echo "Running backup_etcd_swift"
+  echo "Running backup_etcd_exec_swift"
   check_container 'POD' 'CONTAINER'
   if [[ "$?" -ne 0 ]]; then
     echo "Aborting backup, no container selected"
@@ -643,46 +643,52 @@ backup_etcd_swift ()
   local check_health="export ETCDCTL_API=3; etcdctl --cert=/etc/etcd/peer.crt --key=/etc/etcd/peer.key --cacert=/etc/etcd/ca.crt --endpoints=\"${ETCD_ENDPOINT_URL}\" endpoint health"
   local snapshot_cmd="export ETCDCTL_API=3; etcdctl --cert=/etc/etcd/peer.crt --key=/etc/etcd/peer.key --cacert=/etc/etcd/ca.crt --endpoints=\"${ETCD_ENDPOINT_URL}\" --write-out=table snapshot save ${snapshot_dir}/snapshotdb"
   echo "Backing up etcd from container '${CONTAINER}' in pod '${POD}' to '${target}'"
-  if [[ $($cmd bash -c "${check_health}") ]]; then
-    if [[ "${DRY_RUN}" != "true" ]]; then
-      $cmd bash -c "test -d ${snapshot_dir} || mkdir ${snapshot_dir}"
-      $cmd bash -c "${snapshot_cmd} && tar czf - ${snapshot_dir}/snapshotdb" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=${OS_API_VERSION} --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} upload --object-name="${backup_filename}" "${target}" -
-      if [[ "$?" -eq 0 ]]; then
-        send_slack_message_and_echo "Backed up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'"
-        $cmd bash -c "rm -f ${snapshot_dir}/snapshotdb"
-      else
-        send_slack_message_and_echo "Error: Failed to back up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'" danger
-      fi
-      if [[ -n "{$RETENTION}" ]]; then
-        [ "${RETENTION}" -eq "${RETENTION}" ]  2> /dev/null || { echo "retention not a number!"; exit 2; }
-        if [ ${RETENTION} -gt 0 ]; then
-          backup_list=$(${SWIFTCLI} \
-            --os-auth-url=${OS_AUTH_URL} \
-            --auth-version=${OS_API_VERSION} \
-            --os-project-name=${OS_PROJECT_NAME} \
-            --os-username=${OS_USERNAME} \
-            --os-password=${OS_PASSWORD} \
-            list ${target} | grep ${base_backup_filename} | sort)
-          linecount=$(echo "${backup_list}" | wc -l)
-          if [ ${linecount} -gt ${RETENTION} ]; then
-            echo "Keeping last ${RETENTION} entries. Removing old backups:"
-            lastline=$(( ${linecount} - ${RETENTION} ))
-            delete_list=$(echo "${backup_list}" | sed -n "1,${lastline} p")
-            for old_entry in ${delete_list}; do
-              ${SWIFTCLI} \
-                --os-auth-url=${OS_AUTH_URL} \
-                --auth-version=${OS_API_VERSION} \
-                --os-project-name=${OS_PROJECT_NAME} \
-                --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} \
-                delete ${target} ${old_entry}
-            done
+  if [[ $(${cmd} etcdctl) ]]; then
+    if [[ $(${cmd} bash -c "${check_health}") ]]; then
+      if [[ "${DRY_RUN}" != "true" ]]; then
+        $cmd bash -c "test -d ${snapshot_dir} || mkdir ${snapshot_dir}"
+        $cmd bash -c "${snapshot_cmd} && tar czf - ${snapshot_dir}/snapshotdb" | ${SWIFTCLI} --os-auth-url=${OS_AUTH_URL} --auth-version=${OS_API_VERSION} --os-project-name=${OS_PROJECT_NAME} --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} upload --object-name="${backup_filename}" "${target}" -
+        if [[ "$?" -eq 0 ]]; then
+          send_slack_message_and_echo "Backed up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'"
+          $cmd bash -c "rm -f ${snapshot_dir}/snapshotdb"
+        else
+          send_slack_message_and_echo "Error: Failed to back up ETCD db from container '${CONTAINER}' in pod '${POD}' to '${target}'" danger
+        fi
+        if [[ -n "{$RETENTION}" ]]; then
+          [ "${RETENTION}" -eq "${RETENTION}" ]  2> /dev/null || { echo "retention not a number!"; exit 2; }
+          if [ ${RETENTION} -gt 0 ]; then
+            backup_list=$(${SWIFTCLI} \
+              --os-auth-url=${OS_AUTH_URL} \
+              --auth-version=${OS_API_VERSION} \
+              --os-project-name=${OS_PROJECT_NAME} \
+              --os-username=${OS_USERNAME} \
+              --os-password=${OS_PASSWORD} \
+              list ${target} | grep ${base_backup_filename} | sort)
+            linecount=$(echo "${backup_list}" | wc -l)
+            if [ ${linecount} -gt ${RETENTION} ]; then
+              echo "Keeping last ${RETENTION} entries. Removing old backups:"
+              lastline=$(( ${linecount} - ${RETENTION} ))
+              delete_list=$(echo "${backup_list}" | sed -n "1,${lastline} p")
+              for old_entry in ${delete_list}; do
+                ${SWIFTCLI} \
+                  --os-auth-url=${OS_AUTH_URL} \
+                  --auth-version=${OS_API_VERSION} \
+                  --os-project-name=${OS_PROJECT_NAME} \
+                  --os-username=${OS_USERNAME} --os-password=${OS_PASSWORD} \
+                  delete ${target} ${old_entry}
+              done
+            fi
           fi
         fi
+      else
+        echo "Skipping backup, dry run delected"
       fi
     else
-      echo "Skipping backup, dry run delected"
+      send_slack_message_and_echo "Error: ETCD db endpoint ${ETCD_ENDPOINT_URL} not healthy!" danger
+      exit 2
     fi
   else
+    send_slack_message_and_echo "Error: Cannot exec into container ${CONTAINER} in pod ${POD}!" danger
     exit 2
   fi
 }
@@ -934,7 +940,7 @@ case $TASK in
       echo "Not implemented yet"
 	elif [[ "${BACKUP_BACKEND}" == "swift" ]]; then
       set_openstack_environment_variables ${SECRET}
-      backup_etcd_swift
+      backup_etcd_exec_swift
 	else
 	  echo "Unknown backup backend"
 	fi
